@@ -133,9 +133,33 @@
   #yes { transform-origin: center; }
   #no.loose { position: fixed; z-index: 6; transition: left .22s ease-out, top .22s ease-out; }
   .fine { font-size: 13px; color: var(--muted); }
+  .quip { min-height: 1.5em; font-weight: 800; color: var(--rose-deep); text-wrap: balance; }
+  .quip.show { animation: pop .4s cubic-bezier(.3, 1.5, .5, 1) both; }
+
+  #code {
+    position: fixed; inset: 0; z-index: 8;
+    display: grid; place-content: center; gap: 18px; text-align: center;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background:
+      linear-gradient(rgba(143, 247, 208, .06) 1px, transparent 1px) 0 0 / 100% 24px,
+      linear-gradient(90deg, rgba(143, 247, 208, .06) 1px, transparent 1px) 0 0 / 24px 100%,
+      #0b0314;
+    color: #8ff7d0;
+  }
+  #code svg { width: min(92vw, 560px); height: 140px; overflow: visible; }
+  #code path { fill: none; stroke: #8ff7d0; stroke-width: 3; stroke-linejoin: round; filter: drop-shadow(0 0 6px rgba(143, 247, 208, .9)); }
+  #code .draw { stroke-dasharray: 1200; stroke-dashoffset: 1200; animation: draw 1.4s linear forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  #codeText { margin: 0; font: 400 clamp(1.6rem, 7vw, 2.4rem) var(--display); text-wrap: balance; }
+  #codeSub { margin: 0; font-weight: 800; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(143, 247, 208, .6); }
+  #code.zap { background: #fff; color: var(--plum); }
+  #code.zap path { stroke: var(--plum); }
+  .shake { animation: shake .4s linear; }
+  @keyframes shake { 20% { transform: translate(-10px, 4px); } 40% { transform: translate(9px, -5px); } 60% { transform: translate(-6px, 3px); } 80% { transform: translate(4px, -2px); } }
 
   @media (prefers-reduced-motion: reduce) {
-    .card { animation: none; }
+    .card, .quip.show, .shake { animation: none; }
     .fill, #no.loose { transition: none; }
   }
 </style></head><body>
@@ -175,7 +199,14 @@
       <button class="btn btn-main" id="yes" type="button">So ready</button>
       <button class="btn btn-soft" id="no" type="button">Not yet</button>
     </div>
+    <p class="quip" id="quip" aria-live="polite"></p>
   </div>
+</div>
+
+<div id="code" hidden aria-live="assertive">
+  <p id="codeSub">Monitor · Lead II</p>
+  <svg viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden="true"><path id="codePath" d="M0 50 H400"></path></svg>
+  <p id="codeText">Patient is flatlining…</p>
 </div>
 
 <div class="overlay" id="end" hidden>
@@ -743,17 +774,68 @@
 
   // ---------- the question ----------
   const yesBtn = $("yes"), noBtn = $("no");
-  const NO_LINES = ["Not yet", "Really?", "Tudor…", "It's Monday!", "Wrong button", "Okay, I'm nervous"];
+  const NO_LINES = ["Not yet", "Not yet??", "Still no", "…not yet", "Hmm", "Okay, I'm nervous"];
+  const QUIPS = {
+    1: "Really? The heart monitor says otherwise 📈",
+    2: "Error 404: \u201Cnot ready\u201D not found",
+    3: "code",
+    4: "Getting a second opinion… Dr. Me says you're ready ✅",
+    5: "Fine. Last chance. Choose wisely 👀",
+  };
+  const quipEl = $("quip"), codeEl = $("code"), codePath = $("codePath"), codeText = $("codeText");
+  let coding = false, lastDodge = 0;
+  function quip(text) {
+    quipEl.textContent = text;
+    quipEl.classList.remove("show"); void quipEl.offsetWidth; quipEl.classList.add("show");
+  }
+  function beats() {
+    let d = "M0 50";
+    for (const x of [40, 170, 300]) d += ` H${x} L${x + 10} 43 L${x + 20} 50 H${x + 32} L${x + 38} 58 L${x + 46} 6 L${x + 54} 74 L${x + 60} 50 H${x + 78} L${x + 92} 40 L${x + 106} 50`;
+    return d + " H400";
+  }
+  function flatline() {
+    coding = true;
+    codeEl.classList.remove("zap");
+    codePath.setAttribute("d", "M0 50 H400");
+    codePath.classList.remove("draw"); void codePath.getBoundingClientRect(); codePath.classList.add("draw");
+    $("codeSub").textContent = "Monitor · Lead II";
+    codeText.textContent = "Patient said “not yet” and flatlined 😵";
+    codeEl.hidden = false;
+    tone(1000, 1000, 1.8, "sine", .07);
+    setTimeout(() => {
+      codeText.textContent = "CLEAR! ⚡";
+      $("codeSub").textContent = "Charging 200 J";
+      codeEl.classList.add("zap");
+      if (!RM) { codeEl.classList.add("shake"); }
+      tone(90, 1600, .3, "sawtooth", .12);
+      try { navigator.vibrate && navigator.vibrate([60, 40, 120]); } catch (e) {}
+    }, 2000);
+    setTimeout(() => {
+      codeEl.classList.remove("zap", "shake");
+      codePath.classList.remove("draw"); void codePath.getBoundingClientRect();
+      codePath.setAttribute("d", beats()); codePath.classList.add("draw");
+      $("codeSub").textContent = "180 BPM";
+      codeText.textContent = "He's back! And still very cute 😮‍💨";
+      [0, .35, .7].forEach(d => tone(1040, 1000, .06, "sine", .05, d));
+    }, 2450);
+    setTimeout(() => {
+      codeEl.hidden = true; coding = false;
+      quip("Phew. That was close. Want to try that answer again? 😌");
+    }, 4300);
+  }
   let noCount = 0;
   function resetNo() {
-    noCount = 0; noBtn.textContent = NO_LINES[0];
+    noCount = 0; noBtn.textContent = NO_LINES[0]; quipEl.textContent = "";
     noBtn.classList.remove("loose"); noBtn.style.left = noBtn.style.top = "";
     yesBtn.style.transform = "";
   }
   function dodge(e) {
-    if (noCount >= NO_LINES.length - 1) return false;
+    if (coding || noCount >= NO_LINES.length - 1) return false;
+    if (performance.now() - lastDodge < 450) return true;
     e.preventDefault();
+    lastDodge = performance.now();
     noCount++;
+    if (QUIPS[noCount] === "code") flatline(); else if (QUIPS[noCount]) quip(QUIPS[noCount]);
     noBtn.textContent = NO_LINES[noCount];
     yesBtn.style.transform = `scale(${1 + noCount * .14})`;
     noBtn.classList.add("loose");
@@ -766,11 +848,12 @@
   noBtn.addEventListener("pointerenter", e => { if (e.pointerType === "mouse") dodge(e); });
   noBtn.addEventListener("pointerdown", dodge);
   noBtn.addEventListener("click", e => {
+    if (coding || performance.now() - lastDodge < 450) return;
     if (noCount < NO_LINES.length - 1) { dodge(e); return; }
     $("ask").hidden = true; resetNo();
-    $("endEyebrow").textContent = "Doctor's note";
-    $("endTitle").textContent = "Nervous is cute 💗";
-    $("endText").textContent = "Me too, honestly. Treatment plan: show up Monday and we'll be nervous together.";
+    $("endEyebrow").textContent = "Diagnosis";
+    $("endTitle").textContent = "Acute pre-date jitters 🩺";
+    $("endText").textContent = "Very common and fully curable. Treatment: show up Monday, let me hold your hand, repeat as needed. No refunds.";
     $("end").hidden = false;
   });
   yesBtn.addEventListener("click", () => {
