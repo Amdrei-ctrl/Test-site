@@ -49,6 +49,9 @@
     color: var(--cream);
   }
   .meter-label span:last-child { font-variant-numeric: tabular-nums; color: var(--gold); }
+  .beat { display: inline-block; color: var(--rose); margin-right: 6px; animation: beat var(--beat, .83s) ease-in-out infinite; }
+  @keyframes beat { 0%, 40%, 100% { transform: scale(1); } 15% { transform: scale(1.35); } 28% { transform: scale(1.15); } }
+  .rx { font-family: var(--display); color: var(--rose-deep); font-size: 1.2em; margin-right: 2px; }
   .track {
     height: 14px; border-radius: 99px; overflow: hidden;
     background: rgba(255, 244, 240, .16);
@@ -129,7 +132,7 @@
 
 <div class="hud off" id="hud">
   <div class="meter">
-    <div class="meter-label"><span id="meterText">Love meter</span><span id="meterCount">0 / 12</span></div>
+    <div class="meter-label"><span><span class="beat" aria-hidden="true">♥</span><span id="meterText">Heart rate</span></span><span id="meterCount">72 BPM</span></div>
     <div class="track"><div class="fill" id="fill"></div></div>
   </div>
   <button class="mute" id="mute" type="button" aria-label="Mute sound">♪</button>
@@ -139,10 +142,11 @@
   <div class="card">
     <p class="eyebrow">A little game for <span class="who">you</span></p>
     <h1>Cupid's Bow</h1>
-    <p>Pop the flying hearts to fill the love meter. When it's full, there's one last heart, and it has a question for you.</p>
+    <p>Pop the flying hearts to get my heart rate up. Once it hits 180 BPM, one last heart shows up, and it has a question for you.</p>
     <ul class="how">
       <li><span><b>Pull back</b> anywhere on the screen and let go to fire</span></li>
       <li><span><b>Tap</b> a spot to shoot straight at it</span></li>
+      <li><span><b>Pills</b> are a double dose, worth 2</span></li>
       <li><span><b>Gold hearts</b> are rare and worth 3</span></li>
     </ul>
     <button class="btn btn-main" id="start" type="button">Pick up the bow</button>
@@ -152,11 +156,11 @@
 <div class="overlay" id="ask" hidden>
   <div class="card">
     <p class="eyebrow" id="askEyebrow">Direct hit</p>
-    <h2>Okay, I made you a whole game for this</h2>
-    <p class="question">Will you go on a date with me?</p>
+    <h2><span class="rx">℞</span> One date, Monday</h2>
+    <p class="question">Ready for our date, Mr. Charming?</p>
     <div class="answers">
-      <button class="btn btn-main" id="yes" type="button">Yes</button>
-      <button class="btn btn-soft" id="no" type="button">No</button>
+      <button class="btn btn-main" id="yes" type="button">So ready</button>
+      <button class="btn btn-soft" id="no" type="button">Not yet</button>
     </div>
   </div>
 </div>
@@ -174,7 +178,7 @@
 <script>
 (() => {
   // ---- Personalise here, or add #Name to the end of the link ----
-  const CONFIG = { name: "", goal: 12 };
+  const CONFIG = { name: "Tudor", goal: 12 };
 
   let hashName = "";
   try {
@@ -182,7 +186,7 @@
       .replace(/[-_+]/g, " ").replace(/[^\p{L} '.]/gu, "").trim().slice(0, 24);
   } catch (e) {}
   const NAME = hashName || CONFIG.name;
-  document.querySelectorAll(".who").forEach(el => { el.textContent = NAME || "you"; });
+  document.querySelectorAll(".who").forEach(el => { el.textContent = NAME ? `future Dr. ${NAME}` : "you"; });
   document.getElementById("askEyebrow").textContent = NAME ? `Direct hit, ${NAME}` : "Direct hit";
 
   const GOAL = CONFIG.goal;
@@ -195,7 +199,8 @@
   const hud = $("hud"), fillEl = $("fill"), meterText = $("meterText"), meterCount = $("meterCount");
 
   const COL = { rose: "#ff4f81", deep: "#d42f64", pink: "#ff9ec0", gold: "#ffc94d", cream: "#fff4f0", plum: "#2a1240" };
-  const COMPLIMENTS = ["cute!", "nice shot", "smooth", "wow", "10/10", "stop it 🥺", "bullseye", "ok show off", "heart eyes", "so good", "obsessed"];
+  const COMPLIMENTS = ["cute!", "nice shot", "stat!", "pulse check ✓", "10/10 bedside manner", "stop it 🥺", "diagnosis: crush",
+    "ok show off", "vitals: adorable", "Dr. Charming", "code pink", "textbook aim", "no notes", "heart eyes"];
 
   let W = 0, H = 0, DPR = 1, scale = 1;
   let sky, stars = [], clouds = [], hillBack, hillFront;
@@ -361,19 +366,39 @@
     if (cooldown <= 0 && (state === "play" || state === "finale")) drawArrow(-6 - pull + 56, 0, 0, 56);
     ctx.restore();
   }
+  function drawPill(x, y, s, ang, alpha) {
+    const r = s * .42;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y); ctx.rotate(ang);
+    ctx.shadowColor = "rgba(168,240,222,.7)"; ctx.shadowBlur = 14;
+    ctx.fillStyle = COL.rose;
+    ctx.beginPath(); ctx.arc(-s + r, 0, r, Math.PI / 2, Math.PI * 1.5); ctx.lineTo(0, -r); ctx.lineTo(0, r); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = COL.cream;
+    ctx.beginPath(); ctx.arc(s - r, 0, r, -Math.PI / 2, Math.PI / 2); ctx.lineTo(0, r); ctx.lineTo(0, -r); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(42,18,64,.25)"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(0, r); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-s + r, -r * .45); ctx.lineTo(-s * .2, -r * .45); ctx.stroke();
+    // tiny heart printed on the white half
+    ctx.fillStyle = COL.rose; heartPath(ctx, s * .45, 0, r * .45); ctx.fill();
+    ctx.restore();
+  }
   function drawHeartLocal() { ctx.fillStyle = COL.rose; heartPath(ctx, 0, 0, 5); ctx.fill(); }
 
   // ---------- spawning ----------
   function spawnHeart() {
-    const gold = Math.random() < .14;
+    const roll = Math.random();
+    const gold = roll < .12, pill = !gold && roll < .27;
     const fromLeft = Math.random() < .5;
-    const s = (gold ? rand(15, 18) : rand(22, 30)) * scale;
+    const s = (gold ? rand(15, 18) : pill ? rand(20, 24) : rand(22, 30)) * scale;
     const top = Math.max(60, H * .12), bottom = Math.max(top + 40, Math.min(H * .58, bow.y - 170 * scale));
     hearts.push({
       x: fromLeft ? -50 : W + 50,
       baseY: rand(top, bottom), y: 0,
-      vx: (fromLeft ? 1 : -1) * (gold ? rand(150, 210) : rand(50, 115)) * scale,
-      s, gold, phase: Math.random() * 6, f: rand(1.2, 2.4), amp: rand(10, 30),
+      vx: (fromLeft ? 1 : -1) * (gold ? rand(150, 210) : pill ? rand(80, 140) : rand(50, 115)) * scale,
+      s, gold, pill, rot: rand(-.6, .6), spin: rand(-1.2, 1.2), phase: Math.random() * 6, f: rand(1.2, 2.4), amp: rand(10, 30),
       color: gold ? COL.gold : pick([COL.rose, COL.rose, "#ff6f9a", "#ff3d6e"]),
       leaving: false, alpha: 1,
     });
@@ -401,8 +426,10 @@
   // ---------- meter ----------
   function updateMeter() {
     fillEl.style.width = (love / GOAL * 100) + "%";
-    if (state === "finale") { meterText.textContent = "Meter full!"; meterCount.textContent = "One more"; }
-    else { meterText.textContent = "Love meter"; meterCount.textContent = `${love} / ${GOAL}`; }
+    const bpm = Math.round(72 + (love / GOAL) * 108);
+    document.documentElement.style.setProperty("--beat", (60 / bpm).toFixed(2) + "s");
+    meterCount.textContent = `${bpm} BPM`;
+    meterText.textContent = state === "finale" ? "Tachycardia!" : "Heart rate";
   }
 
   // ---------- game flow ----------
@@ -420,7 +447,7 @@
     state = "finale";
     hearts.forEach(h => h.leaving = true);
     big = { x: W / 2, y: -140, ty: H * .34, s: clamp(Math.min(W, H) * .12, 52, 92) };
-    say(W / 2, H * .5, "the last one…", COL.gold, 26);
+    say(W / 2, H * .5, "final checkup…", COL.gold, 26);
     updateMeter();
   }
   function hitBig() {
@@ -434,10 +461,12 @@
   function hit(h, a) {
     h.dead = true;
     a.hits++;
-    const pts = h.gold ? 3 : 1;
+    const pts = h.gold ? 3 : h.pill ? 2 : 1;
     love = Math.min(GOAL, love + pts);
-    burst(h.x, h.y, h.gold ? [COL.gold, "#fff1b8", COL.cream] : [COL.rose, COL.pink, COL.cream, "#ff3d6e"], h.gold ? 30 : 20);
+    burst(h.x, h.y, h.gold ? [COL.gold, "#fff1b8", COL.cream] : h.pill ? [COL.rose, COL.cream, "#7fd6c2"] : [COL.rose, COL.pink, COL.cream, "#ff3d6e"], h.gold ? 30 : 20);
+    try { navigator.vibrate && navigator.vibrate(h.gold ? [20, 40, 20] : 15); } catch (e) {}
     if (h.gold) { sfx.gold(); say(h.x, h.y - h.s, "+3 golden!", COL.gold, 22); }
+    else if (h.pill) { sfx.gold(); say(h.x, h.y - h.s, pick(["+2 Rx", "double dose!", "take twice daily"]), "#a8f0de", 21); }
     else { sfx.pop(); say(h.x, h.y - h.s, a.hits > 1 ? "double!" : pick(COMPLIMENTS)); }
     updateMeter();
     if (love >= GOAL && state === "play") startFinale();
@@ -564,6 +593,7 @@
     ctx.fillStyle = "#4a1a50"; ctx.fill(hillFront);
 
     for (const h of hearts) {
+      if (h.pill) { drawPill(h.x, h.y, h.s, h.rot + t * h.spin, Math.max(0, h.alpha)); continue; }
       drawHeart(h.x, h.y, h.s, h.color, { wings: true, phase: h.phase, alpha: Math.max(0, h.alpha),
         glow: h.gold ? COL.gold : null, flapSpeed: h.gold ? 18 : 11 });
     }
@@ -637,7 +667,7 @@
 
   // ---------- the question ----------
   const yesBtn = $("yes"), noBtn = $("no");
-  const NO_LINES = ["No", "Are you sure?", "Think again", "Pls 🥺", "Wrong button", "Okay, maybe later"];
+  const NO_LINES = ["Not yet", "Really?", "Tudor…", "It's Monday!", "Wrong button", "Okay, I'm nervous"];
   let noCount = 0;
   function resetNo() {
     noCount = 0; noBtn.textContent = NO_LINES[0];
@@ -662,17 +692,17 @@
   noBtn.addEventListener("click", e => {
     if (noCount < NO_LINES.length - 1) { dodge(e); return; }
     $("ask").hidden = true; resetNo();
-    $("endEyebrow").textContent = "No pressure";
-    $("endTitle").textContent = "That's okay 💗";
-    $("endText").textContent = "Thanks for playing my silly little game. The bow's right here if you change your mind.";
+    $("endEyebrow").textContent = "Doctor's note";
+    $("endTitle").textContent = "Nervous is cute 💗";
+    $("endText").textContent = "Me too, honestly. Treatment plan: show up Monday and we'll be nervous together.";
     $("end").hidden = false;
   });
   yesBtn.addEventListener("click", () => {
     $("ask").hidden = true; resetNo();
     heartRain(160); sfx.yay();
-    $("endEyebrow").textContent = NAME ? `Bullseye, ${NAME}` : "Bullseye";
-    $("endTitle").textContent = "It's a date!";
-    $("endText").textContent = "Best shot you've taken all day. Text me and we'll pick a day.";
+    $("endEyebrow").textContent = "Discharge notes";
+    $("endTitle").textContent = "See you Monday 💘";
+    $("endText").textContent = "Prescription: one date, Monday. Side effects may include smiling, a fast pulse and wanting a second appointment.";
     $("end").hidden = false;
   });
 
