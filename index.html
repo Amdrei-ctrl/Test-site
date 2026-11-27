@@ -1,0 +1,688 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cupid's Bow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Nunito:wght@400;700;800&display=swap">
+<style>
+  /* Layout: one full-screen twilight canvas, a thin HUD on top, cream cards that float over the sky. */
+  :root {
+    --sky: #24103a;
+    --plum: #2a1240;
+    --rose: #ff4f81;
+    --rose-deep: #d42f64;
+    --gold: #ffc94d;
+    --cream: #fff4f0;
+    --muted: #7d5a86;
+    --display: "Bagel Fat One", "Arial Rounded MT Bold", ui-rounded, system-ui, sans-serif;
+    --body: "Nunito", ui-rounded, system-ui, -apple-system, sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    background: var(--sky);
+    color: var(--cream);
+    font-family: var(--body);
+    font-size: 16px;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { position: fixed; inset: 0; display: block; touch-action: none; }
+
+  .hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 2;
+    display: flex; align-items: center; gap: 12px;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    pointer-events: none;
+    transition: opacity .4s;
+  }
+  .hud.off { opacity: 0; }
+  .meter { flex: 1; max-width: 360px; display: grid; gap: 6px; }
+  .meter-label {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-weight: 800; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--cream);
+  }
+  .meter-label span:last-child { font-variant-numeric: tabular-nums; color: var(--gold); }
+  .track {
+    height: 14px; border-radius: 99px; overflow: hidden;
+    background: rgba(255, 244, 240, .16);
+    box-shadow: inset 0 0 0 2px rgba(255, 244, 240, .22);
+  }
+  .fill {
+    height: 100%; width: 0%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--rose), var(--gold));
+    transition: width .35s cubic-bezier(.3, 1.4, .5, 1);
+  }
+  .mute {
+    pointer-events: auto; margin-left: auto;
+    width: 42px; height: 42px; border-radius: 50%;
+    border: 2px solid rgba(255, 244, 240, .35);
+    background: rgba(42, 18, 64, .45); color: var(--cream);
+    font: 800 18px var(--body); cursor: pointer;
+    display: grid; place-items: center;
+  }
+  .mute:focus-visible, button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 4;
+    display: grid; place-items: center;
+    padding-block: 24px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background: rgba(36, 16, 58, .42);
+  }
+  .card {
+    width: 100%; max-width: 420px;
+    background: var(--cream); color: var(--plum);
+    border-radius: 30px;
+    padding: 30px 26px 26px;
+    text-align: center;
+    box-shadow: 0 24px 70px rgba(18, 0, 30, .55), 0 0 0 6px rgba(255, 79, 129, .25);
+    display: grid; gap: 14px;
+    animation: pop .5s cubic-bezier(.3, 1.5, .5, 1) both;
+  }
+  @keyframes pop { from { transform: scale(.85) translateY(12px); opacity: 0; } }
+  .eyebrow {
+    margin: 0; font-weight: 800; font-size: 12px;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+  }
+  h1, h2 { margin: 0; font-family: var(--display); font-weight: 400; color: var(--rose-deep); text-wrap: balance; line-height: 1; }
+  h1 { font-size: clamp(2.8rem, 12vw, 3.8rem); }
+  h2 { font-size: clamp(1.9rem, 8vw, 2.5rem); }
+  .card p { margin: 0; line-height: 1.5; }
+  .question { font-family: var(--display); font-size: clamp(1.5rem, 6.5vw, 1.9rem); line-height: 1.15; color: var(--plum); text-wrap: balance; }
+  .how { list-style: none; margin: 0; padding: 14px 16px; border-radius: 18px; background: rgba(255, 79, 129, .1); display: grid; gap: 8px; text-align: left; font-size: 15px; }
+  .how li { display: flex; gap: 10px; align-items: baseline; }
+  .how li::before { content: "♥"; color: var(--rose); flex: none; }
+  .how b { color: var(--rose-deep); }
+
+  .btn {
+    font: 800 17px var(--body);
+    border: 0; border-radius: 99px;
+    padding: 14px 26px;
+    cursor: pointer;
+    transition: transform .2s cubic-bezier(.3, 1.5, .5, 1), box-shadow .2s;
+  }
+  .btn-main { background: var(--rose); color: #fff; box-shadow: 0 6px 0 var(--rose-deep); }
+  .btn-main:hover { transform: translateY(-2px); }
+  .btn-main:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--rose-deep); }
+  .btn-soft { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 2px rgba(125, 90, 134, .35); }
+  .answers { display: flex; justify-content: center; align-items: center; gap: 14px; flex-wrap: wrap; min-height: 64px; }
+  #yes { transform-origin: center; }
+  #no.loose { position: fixed; z-index: 6; transition: left .22s ease-out, top .22s ease-out; }
+  .fine { font-size: 13px; color: var(--muted); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { animation: none; }
+    .fill, #no.loose { transition: none; }
+  }
+</style></head><body>
+
+<canvas id="game" aria-label="Cupid's Bow game: pull back to aim the bow and shoot the flying hearts"></canvas>
+
+<div class="hud off" id="hud">
+  <div class="meter">
+    <div class="meter-label"><span id="meterText">Love meter</span><span id="meterCount">0 / 12</span></div>
+    <div class="track"><div class="fill" id="fill"></div></div>
+  </div>
+  <button class="mute" id="mute" type="button" aria-label="Mute sound">♪</button>
+</div>
+
+<div class="overlay" id="intro">
+  <div class="card">
+    <p class="eyebrow">A little game for <span class="who">you</span></p>
+    <h1>Cupid's Bow</h1>
+    <p>Pop the flying hearts to fill the love meter. When it's full, there's one last heart, and it has a question for you.</p>
+    <ul class="how">
+      <li><span><b>Pull back</b> anywhere on the screen and let go to fire</span></li>
+      <li><span><b>Tap</b> a spot to shoot straight at it</span></li>
+      <li><span><b>Gold hearts</b> are rare and worth 3</span></li>
+    </ul>
+    <button class="btn btn-main" id="start" type="button">Pick up the bow</button>
+  </div>
+</div>
+
+<div class="overlay" id="ask" hidden>
+  <div class="card">
+    <p class="eyebrow" id="askEyebrow">Direct hit</p>
+    <h2>Okay, I made you a whole game for this</h2>
+    <p class="question">Will you go on a date with me?</p>
+    <div class="answers">
+      <button class="btn btn-main" id="yes" type="button">Yes</button>
+      <button class="btn btn-soft" id="no" type="button">No</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="end" hidden>
+  <div class="card">
+    <p class="eyebrow" id="endEyebrow">Bullseye</p>
+    <h2 id="endTitle">It's a date!</h2>
+    <p id="endText">Best shot you've taken all day. Text me and we'll pick a day.</p>
+    <button class="btn btn-main" id="again" type="button">Play again</button>
+    <p class="fine">Screenshot this and send it to me 💌</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---- Personalise here, or add #Name to the end of the link ----
+  const CONFIG = { name: "", goal: 12 };
+
+  let hashName = "";
+  try {
+    hashName = decodeURIComponent((location.hash || "").slice(1))
+      .replace(/[-_+]/g, " ").replace(/[^\p{L} '.]/gu, "").trim().slice(0, 24);
+  } catch (e) {}
+  const NAME = hashName || CONFIG.name;
+  document.querySelectorAll(".who").forEach(el => { el.textContent = NAME || "you"; });
+  document.getElementById("askEyebrow").textContent = NAME ? `Direct hit, ${NAME}` : "Direct hit";
+
+  const GOAL = CONFIG.goal;
+  const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const FX = RM ? 0.4 : 1;
+
+  const cv = document.getElementById("game");
+  const ctx = cv.getContext("2d");
+  const $ = id => document.getElementById(id);
+  const hud = $("hud"), fillEl = $("fill"), meterText = $("meterText"), meterCount = $("meterCount");
+
+  const COL = { rose: "#ff4f81", deep: "#d42f64", pink: "#ff9ec0", gold: "#ffc94d", cream: "#fff4f0", plum: "#2a1240" };
+  const COMPLIMENTS = ["cute!", "nice shot", "smooth", "wow", "10/10", "stop it 🥺", "bullseye", "ok show off", "heart eyes", "so good", "obsessed"];
+
+  let W = 0, H = 0, DPR = 1, scale = 1;
+  let sky, stars = [], clouds = [], hillBack, hillFront;
+  const bow = { x: 0, y: 0 };
+
+  let state = "intro"; // intro | play | finale | done | card
+  let love = 0, shots = 0, t = 0, last = performance.now(), cooldown = 0;
+  let hearts = [], arrows = [], parts = [], texts = [], big = null;
+  const aim = { on: false, id: null, sx: 0, sy: 0, cx: 0, cy: 0, angle: -Math.PI / 2, power: 0, t0: 0 };
+  const G = 420;
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = arr => arr[(Math.random() * arr.length) | 0];
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  // ---------- sound ----------
+  let AC = null, muted = false;
+  function audio() {
+    if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (AC && AC.state === "suspended") AC.resume().catch(() => {});
+  }
+  function tone(f1, f2, dur, type = "sine", vol = .15, delay = 0) {
+    if (muted || !AC) return;
+    const o = AC.createOscillator(), g = AC.createGain(), t0 = AC.currentTime + delay;
+    o.type = type;
+    o.frequency.setValueAtTime(f1, t0);
+    o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+    o.connect(g).connect(AC.destination);
+    o.start(t0); o.stop(t0 + dur + .03);
+  }
+  const sfx = {
+    twang: () => tone(190, 85, .2, "triangle", .2),
+    pop: () => { tone(500, 1150, .12, "sine", .18); tone(1400, 1800, .06, "sine", .05, .03); },
+    gold: () => [660, 880, 1320].forEach((f, i) => tone(f, f * 1.01, .2, "sine", .13, i * .07)),
+    chime: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, f, .6, "sine", .12, i * .11)),
+    yay: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, f * 1.02, .35, "triangle", .1, i * .09)),
+  };
+  $("mute").addEventListener("click", () => {
+    muted = !muted;
+    $("mute").textContent = muted ? "✕" : "♪";
+    $("mute").setAttribute("aria-label", muted ? "Turn sound on" : "Mute sound");
+  });
+
+  // ---------- setup ----------
+  function resize() {
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    cv.style.width = W + "px"; cv.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    scale = clamp(Math.min(W, H) / 700, .8, 1.3);
+    bow.x = W / 2;
+    bow.y = H - Math.max(84, H * .13);
+
+    sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, "#1d0c33");
+    sky.addColorStop(.45, "#4b1f63");
+    sky.addColorStop(.78, "#b2447a");
+    sky.addColorStop(1, "#ff9a8b");
+
+    stars = Array.from({ length: Math.round(W * H / 9000) }, () => ({
+      x: Math.random() * W, y: Math.random() * H * .6, r: rand(.5, 1.6), p: Math.random() * 6,
+    }));
+    if (!clouds.length) clouds = Array.from({ length: 5 }, () => makeCloud(Math.random() * W));
+
+    hillBack = new Path2D(); hillFront = new Path2D();
+    buildHill(hillBack, H * .84, 26, .006, 1.3);
+    buildHill(hillFront, H * .92, 18, .009, 4.1);
+    if (big) big.ty = H * .34;
+  }
+  function buildHill(p, base, amp, freq, phase) {
+    p.moveTo(0, H);
+    for (let x = 0; x <= W + 10; x += 10) p.lineTo(x, base + Math.sin(x * freq + phase) * amp + Math.sin(x * freq * 2.3) * amp * .4);
+    p.lineTo(W, H); p.closePath();
+  }
+  function makeCloud(x) {
+    return { x, y: rand(.08, .5) * (H || 600), s: rand(.6, 1.3), v: rand(6, 16) };
+  }
+
+  // ---------- shapes ----------
+  function heartPath(c, x, y, s) {
+    c.beginPath();
+    c.moveTo(x, y + s * .9);
+    c.bezierCurveTo(x - s * 1.45, y + s * .05, x - s * .9, y - s * 1.15, x, y - s * .42);
+    c.bezierCurveTo(x + s * .9, y - s * 1.15, x + s * 1.45, y + s * .05, x, y + s * .9);
+    c.closePath();
+  }
+  function drawHeart(x, y, s, color, opts = {}) {
+    const flap = Math.sin(t * (opts.flapSpeed || 11) + (opts.phase || 0));
+    ctx.save();
+    ctx.globalAlpha = opts.alpha ?? 1;
+    if (opts.wings) {
+      ctx.fillStyle = "rgba(255,255,255,.88)";
+      for (const side of [-1, 1]) {
+        ctx.save();
+        ctx.translate(x + side * s * 1.05, y - s * .3);
+        ctx.rotate(-side * (.35 + .35 * flap));
+        ctx.beginPath();
+        ctx.ellipse(side * s * .35, 0, s * .6, s * .27, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    if (opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = opts.glowSize || 18; }
+    ctx.fillStyle = color;
+    heartPath(ctx, x, y, s);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    if (s > 8) {
+      ctx.fillStyle = "rgba(255,255,255,.65)";
+      ctx.beginPath();
+      ctx.ellipse(x - s * .45, y - s * .38, s * .2, s * .12, -.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawArrow(x, y, ang, len = 54) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.strokeStyle = COL.cream; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-len, 0); ctx.lineTo(-8, 0); ctx.stroke();
+    ctx.strokeStyle = COL.pink; ctx.lineWidth = 2.5;
+    for (const o of [0, 6]) {
+      ctx.beginPath();
+      ctx.moveTo(-len + o, 0); ctx.lineTo(-len + o - 7, -6);
+      ctx.moveTo(-len + o, 0); ctx.lineTo(-len + o - 7, 6);
+      ctx.stroke();
+    }
+    ctx.save();
+    ctx.translate(-7, 0); ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = COL.rose;
+    heartPath(ctx, 0, 0, 8);
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+  }
+  function drawBow() {
+    // little cloud the bow rests on
+    ctx.fillStyle = "rgba(255,244,240,.95)";
+    for (const [dx, dy, r] of [[-34, 44, 18], [-12, 38, 22], [14, 40, 21], [36, 46, 16], [0, 50, 20]]) {
+      ctx.beginPath(); ctx.arc(bow.x + dx * scale, bow.y + dy * scale, r * scale, 0, Math.PI * 2); ctx.fill();
+    }
+    const pull = aim.on ? aim.power * 30 : 0;
+    ctx.save();
+    ctx.translate(bow.x, bow.y);
+    ctx.scale(scale, scale);
+    ctx.rotate(aim.angle);
+    // string
+    ctx.strokeStyle = "rgba(255,244,240,.9)"; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-6, -44); ctx.lineTo(-6 - pull, 0); ctx.lineTo(-6, 44); ctx.stroke();
+    // limbs
+    const grad = ctx.createLinearGradient(0, -46, 0, 46);
+    grad.addColorStop(0, "#ffe08a"); grad.addColorStop(.5, COL.gold); grad.addColorStop(1, "#e9a93a");
+    ctx.strokeStyle = grad; ctx.lineWidth = 7; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-6, -44); ctx.quadraticCurveTo(30, 0, -6, 44); ctx.stroke();
+    ctx.fillStyle = COL.rose;
+    ctx.fillRect(9, -8, 7, 16);
+    // tips
+    for (const y of [-44, 44]) { ctx.save(); ctx.translate(-6, y); drawHeartLocal(); ctx.restore(); }
+    if (cooldown <= 0 && (state === "play" || state === "finale")) drawArrow(-6 - pull + 56, 0, 0, 56);
+    ctx.restore();
+  }
+  function drawHeartLocal() { ctx.fillStyle = COL.rose; heartPath(ctx, 0, 0, 5); ctx.fill(); }
+
+  // ---------- spawning ----------
+  function spawnHeart() {
+    const gold = Math.random() < .14;
+    const fromLeft = Math.random() < .5;
+    const s = (gold ? rand(15, 18) : rand(22, 30)) * scale;
+    const top = Math.max(60, H * .12), bottom = Math.max(top + 40, Math.min(H * .58, bow.y - 170 * scale));
+    hearts.push({
+      x: fromLeft ? -50 : W + 50,
+      baseY: rand(top, bottom), y: 0,
+      vx: (fromLeft ? 1 : -1) * (gold ? rand(150, 210) : rand(50, 115)) * scale,
+      s, gold, phase: Math.random() * 6, f: rand(1.2, 2.4), amp: rand(10, 30),
+      color: gold ? COL.gold : pick([COL.rose, COL.rose, "#ff6f9a", "#ff3d6e"]),
+      leaving: false, alpha: 1,
+    });
+  }
+  function burst(x, y, colors, n, speed = 260) {
+    n = Math.round(n * FX);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = rand(60, speed);
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, g: 320, life: rand(.6, 1.2), max: 1.2,
+        size: rand(4, 9) * scale, color: pick(colors), kind: Math.random() < .6 ? "heart" : "spark", spin: rand(-4, 4) });
+    }
+  }
+  function heartRain(n) {
+    n = Math.round(n * FX);
+    for (let i = 0; i < n; i++) {
+      parts.push({ x: Math.random() * W, y: rand(-H * .6, -10), vx: rand(-20, 20), vy: rand(60, 170), g: 25,
+        life: rand(4, 7), max: 7, size: rand(7, 16) * scale, color: pick([COL.rose, COL.gold, COL.pink, COL.cream, "#ff6f9a"]),
+        kind: "heart", spin: rand(-2, 2) });
+    }
+  }
+  function say(x, y, text, color = COL.cream, size = 20) {
+    texts.push({ x, y, text, color, size: size * scale, life: 1.1 });
+  }
+
+  // ---------- meter ----------
+  function updateMeter() {
+    fillEl.style.width = (love / GOAL * 100) + "%";
+    if (state === "finale") { meterText.textContent = "Meter full!"; meterCount.textContent = "One more"; }
+    else { meterText.textContent = "Love meter"; meterCount.textContent = `${love} / ${GOAL}`; }
+  }
+
+  // ---------- game flow ----------
+  function startGame() {
+    audio();
+    $("intro").hidden = true; $("ask").hidden = true; $("end").hidden = true;
+    resetNo();
+    love = 0; shots = 0; arrows = []; big = null;
+    hearts.forEach(h => h.leaving = false);
+    state = "play";
+    hud.classList.remove("off");
+    updateMeter();
+  }
+  function startFinale() {
+    state = "finale";
+    hearts.forEach(h => h.leaving = true);
+    big = { x: W / 2, y: -140, ty: H * .34, s: clamp(Math.min(W, H) * .12, 52, 92) };
+    say(W / 2, H * .5, "the last one…", COL.gold, 26);
+    updateMeter();
+  }
+  function hitBig() {
+    burst(big.x, big.y, [COL.rose, COL.gold, COL.pink, COL.cream], 140, 520);
+    sfx.chime();
+    big = null;
+    state = "done";
+    hud.classList.add("off");
+    setTimeout(() => { state = "card"; $("ask").hidden = false; }, 950);
+  }
+  function hit(h, a) {
+    h.dead = true;
+    a.hits++;
+    const pts = h.gold ? 3 : 1;
+    love = Math.min(GOAL, love + pts);
+    burst(h.x, h.y, h.gold ? [COL.gold, "#fff1b8", COL.cream] : [COL.rose, COL.pink, COL.cream, "#ff3d6e"], h.gold ? 30 : 20);
+    if (h.gold) { sfx.gold(); say(h.x, h.y - h.s, "+3 golden!", COL.gold, 22); }
+    else { sfx.pop(); say(h.x, h.y - h.s, a.hits > 1 ? "double!" : pick(COMPLIMENTS)); }
+    updateMeter();
+    if (love >= GOAL && state === "play") startFinale();
+  }
+
+  // ---------- input ----------
+  function canShoot() { return state === "play" || state === "finale"; }
+  cv.addEventListener("pointerdown", e => {
+    if (!canShoot() || aim.on) return;
+    audio();
+    aim.on = true; aim.id = e.pointerId;
+    aim.sx = aim.cx = e.clientX; aim.sy = aim.cy = e.clientY;
+    aim.power = 0; aim.t0 = performance.now();
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!aim.on || e.pointerId !== aim.id) return;
+    aim.cx = e.clientX; aim.cy = e.clientY;
+    const px = aim.sx - aim.cx, py = aim.sy - aim.cy, len = Math.hypot(px, py);
+    if (len > 12) { aim.angle = Math.atan2(py, px); aim.power = Math.min(len, 160) / 160; }
+  });
+  function release(e) {
+    if (!aim.on || e.pointerId !== aim.id) return;
+    aim.on = false;
+    if (!canShoot() || cooldown > 0) { aim.power = 0; return; }
+    const px = aim.sx - aim.cx, py = aim.sy - aim.cy, len = Math.hypot(px, py);
+    let dx, dy, speed;
+    if (len <= 12) {
+      // tap: shoot at the tapped spot
+      dx = aim.sx - bow.x; dy = aim.sy - bow.y;
+      const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d; speed = 1250;
+      aim.angle = Math.atan2(dy, dx);
+    } else {
+      dx = px / len; dy = py / len; speed = 520 + 1000 * aim.power;
+    }
+    fire(dx, dy, speed);
+    aim.power = 0;
+  }
+  cv.addEventListener("pointerup", release);
+  cv.addEventListener("pointercancel", e => { if (e.pointerId === aim.id) { aim.on = false; aim.power = 0; } });
+
+  function fire(dx, dy, speed) {
+    const sx = bow.x + dx * 40 * scale, sy = bow.y + dy * 40 * scale;
+    arrows.push({ x: sx, y: sy, vx: dx * speed, vy: dy * speed, hits: 0 });
+    shots++;
+    cooldown = .22;
+    sfx.twang();
+  }
+
+  // ---------- update ----------
+  function update(dt) {
+    t += dt;
+    cooldown -= dt;
+    for (const c of clouds) {
+      c.x += c.v * dt;
+      if (c.x - 120 * c.s > W) Object.assign(c, makeCloud(-120 * c.s));
+    }
+
+    if (state === "intro" || state === "play") {
+      const want = W < 600 ? 4 : 6;
+      if (hearts.filter(h => !h.leaving).length < want && Math.random() < dt * 3) spawnHeart();
+    }
+
+    for (const h of hearts) {
+      h.x += h.vx * dt;
+      if (h.leaving) { h.baseY -= 160 * dt; h.alpha -= dt * 1.2; }
+      h.y = h.baseY + Math.sin(t * h.f + h.phase) * h.amp;
+    }
+    hearts = hearts.filter(h => !h.dead && h.alpha > 0 && !(h.vx > 0 && h.x > W + 80) && !(h.vx < 0 && h.x < -80));
+
+    if (big) {
+      big.y += (big.ty - big.y) * Math.min(1, dt * 1.6);
+      big.x = W / 2 + Math.sin(t * .8) * Math.min(W * .22, 180);
+    }
+
+    for (const a of arrows) {
+      a.vy += G * dt; a.x += a.vx * dt; a.y += a.vy * dt;
+      const ang = Math.atan2(a.vy, a.vx);
+      const pts = [[a.x, a.y], [a.x - Math.cos(ang) * 18, a.y - Math.sin(ang) * 18]];
+      for (const h of hearts) {
+        if (h.dead || h.leaving) continue;
+        const r = h.s * 1.15;
+        if (pts.some(([x, y]) => (x - h.x) ** 2 + (y - h.y) ** 2 < r * r)) hit(h, a);
+      }
+      if (big && state === "finale") {
+        const r = big.s * 1.1;
+        if (pts.some(([x, y]) => (x - big.x) ** 2 + (y - big.y) ** 2 < r * r)) { a.dead = true; hitBig(); }
+      }
+      if (a.y > H + 60 || a.x < -80 || a.x > W + 80 || a.y < -600) a.dead = true;
+    }
+    arrows = arrows.filter(a => !a.dead);
+
+    for (const p of parts) { p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+    parts = parts.filter(p => p.life > 0 && p.y < H + 40);
+    for (const tx of texts) { tx.y -= 42 * dt; tx.life -= dt; }
+    texts = texts.filter(tx => tx.life > 0);
+  }
+
+  // ---------- draw ----------
+  function draw() {
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+    // moon glow
+    const mx = W * .82, my = H * .14, mr = 34 * scale;
+    const glow = ctx.createRadialGradient(mx, my, mr * .5, mx, my, mr * 4);
+    glow.addColorStop(0, "rgba(255,214,230,.35)"); glow.addColorStop(1, "rgba(255,214,230,0)");
+    ctx.fillStyle = glow; ctx.fillRect(mx - mr * 4, my - mr * 4, mr * 8, mr * 8);
+    ctx.fillStyle = "#ffe3ec"; ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.fill();
+
+    for (const s of stars) {
+      ctx.globalAlpha = .25 + .55 * (.5 + .5 * Math.sin(t * 1.6 + s.p));
+      ctx.fillStyle = COL.cream; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = "rgba(255,200,225,.13)";
+    for (const c of clouds) {
+      for (const [dx, dy, r] of [[0, 0, 34], [36, -10, 28], [70, 2, 30], [34, 10, 30]]) {
+        ctx.beginPath(); ctx.arc(c.x + dx * c.s, c.y + dy * c.s, r * c.s, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    ctx.fillStyle = "#7a2f6b"; ctx.fill(hillBack);
+    ctx.fillStyle = "#4a1a50"; ctx.fill(hillFront);
+
+    for (const h of hearts) {
+      drawHeart(h.x, h.y, h.s, h.color, { wings: true, phase: h.phase, alpha: Math.max(0, h.alpha),
+        glow: h.gold ? COL.gold : null, flapSpeed: h.gold ? 18 : 11 });
+    }
+
+    if (big) {
+      const pulse = 1 + .05 * Math.sin(t * 4);
+      drawHeart(big.x, big.y, big.s * pulse, COL.rose, { wings: true, glow: "#ff9ec0", glowSize: 40, flapSpeed: 6 });
+      ctx.fillStyle = COL.cream;
+      ctx.font = `${Math.round(big.s * .95)}px ${getComputedStyle(document.documentElement).getPropertyValue("--display")}`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("?", big.x, big.y + big.s * .05);
+    }
+
+    // aim guide
+    if (aim.on && aim.power > 0 && canShoot()) {
+      const speed = 520 + 1000 * aim.power;
+      let x = bow.x + Math.cos(aim.angle) * 40 * scale, y = bow.y + Math.sin(aim.angle) * 40 * scale;
+      let vx = Math.cos(aim.angle) * speed, vy = Math.sin(aim.angle) * speed;
+      for (let i = 0; i < 16; i++) {
+        const dt = .035; vy += G * dt; x += vx * dt; y += vy * dt;
+        ctx.globalAlpha = (1 - i / 16) * .8;
+        ctx.fillStyle = COL.cream;
+        ctx.beginPath(); ctx.arc(x, y, 2.6, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = .35;
+      ctx.strokeStyle = COL.cream; ctx.lineWidth = 2; ctx.setLineDash([4, 6]);
+      ctx.beginPath(); ctx.moveTo(aim.sx, aim.sy); ctx.lineTo(aim.cx, aim.cy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+
+    for (const a of arrows) drawArrow(a.x, a.y, Math.atan2(a.vy, a.vx));
+    if (state !== "intro") drawBow();
+
+    for (const p of parts) {
+      ctx.globalAlpha = Math.min(1, p.life / Math.min(.5, p.max));
+      if (p.kind === "heart") {
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.spin * p.life);
+        ctx.fillStyle = p.color; heartPath(ctx, 0, 0, p.size); ctx.fill(); ctx.restore();
+      } else {
+        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size * .4, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for (const tx of texts) {
+      ctx.globalAlpha = Math.min(1, tx.life * 2);
+      ctx.font = `800 ${Math.round(tx.size)}px Nunito, ui-rounded, system-ui, sans-serif`;
+      ctx.lineWidth = 4; ctx.strokeStyle = "rgba(42,18,64,.6)";
+      ctx.strokeText(tx.text, tx.x, tx.y);
+      ctx.fillStyle = tx.color; ctx.fillText(tx.text, tx.x, tx.y);
+    }
+    ctx.globalAlpha = 1;
+
+    if (state === "play" && shots === 0) {
+      ctx.globalAlpha = .6 + .4 * Math.sin(t * 3);
+      ctx.font = `800 ${Math.round(16 * scale)}px Nunito, ui-rounded, system-ui, sans-serif`;
+      ctx.fillStyle = COL.cream;
+      ctx.fillText("pull back anywhere and let go", W / 2, bow.y - 90 * scale);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function frame(now) {
+    const dt = Math.min(.033, (now - last) / 1000);
+    last = now;
+    update(dt); draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- the question ----------
+  const yesBtn = $("yes"), noBtn = $("no");
+  const NO_LINES = ["No", "Are you sure?", "Think again", "Pls 🥺", "Wrong button", "Okay, maybe later"];
+  let noCount = 0;
+  function resetNo() {
+    noCount = 0; noBtn.textContent = NO_LINES[0];
+    noBtn.classList.remove("loose"); noBtn.style.left = noBtn.style.top = "";
+    yesBtn.style.transform = "";
+  }
+  function dodge(e) {
+    if (noCount >= NO_LINES.length - 1) return false;
+    e.preventDefault();
+    noCount++;
+    noBtn.textContent = NO_LINES[noCount];
+    yesBtn.style.transform = `scale(${1 + noCount * .14})`;
+    noBtn.classList.add("loose");
+    const r = noBtn.getBoundingClientRect(), pad = 20;
+    noBtn.style.left = (pad + Math.random() * Math.max(0, W - r.width - pad * 2)) + "px";
+    noBtn.style.top = (pad + Math.random() * Math.max(0, H - r.height - pad * 2)) + "px";
+    tone(300, 220, .1, "triangle", .08);
+    return true;
+  }
+  noBtn.addEventListener("pointerenter", e => { if (e.pointerType === "mouse") dodge(e); });
+  noBtn.addEventListener("pointerdown", dodge);
+  noBtn.addEventListener("click", e => {
+    if (noCount < NO_LINES.length - 1) { dodge(e); return; }
+    $("ask").hidden = true; resetNo();
+    $("endEyebrow").textContent = "No pressure";
+    $("endTitle").textContent = "That's okay 💗";
+    $("endText").textContent = "Thanks for playing my silly little game. The bow's right here if you change your mind.";
+    $("end").hidden = false;
+  });
+  yesBtn.addEventListener("click", () => {
+    $("ask").hidden = true; resetNo();
+    heartRain(160); sfx.yay();
+    $("endEyebrow").textContent = NAME ? `Bullseye, ${NAME}` : "Bullseye";
+    $("endTitle").textContent = "It's a date!";
+    $("endText").textContent = "Best shot you've taken all day. Text me and we'll pick a day.";
+    $("end").hidden = false;
+  });
+
+  $("start").addEventListener("click", startGame);
+  $("again").addEventListener("click", startGame);
+  window.addEventListener("resize", resize);
+
+  resize();
+  for (let i = 0; i < 4; i++) { spawnHeart(); hearts[i].x = rand(W * .1, W * .9); }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body></html>
