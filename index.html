@@ -238,7 +238,8 @@
   const FX = RM ? 0.4 : 1;
 
   const cv = document.getElementById("game");
-  const ctx = cv.getContext("2d");
+  const ctx = cv.getContext("2d", { alpha: false });
+  const DISPLAY_FONT = getComputedStyle(document.documentElement).getPropertyValue("--display").trim() || "sans-serif";
   const $ = id => document.getElementById(id);
   const hud = $("hud"), fillEl = $("fill"), meterText = $("meterText"), meterCount = $("meterCount");
 
@@ -247,7 +248,8 @@
     "ok show off", "vitals: adorable", "Dr. Charming", "code pink", "textbook aim", "no notes", "heart eyes"];
 
   let W = 0, H = 0, DPR = 1, scale = 1;
-  let sky, stars = [], clouds = [], hillBack, hillFront;
+  let bgCv = document.createElement("canvas"), stars = [], clouds = [], bowGrad = null;
+  let perfScale = 1, slowTime = 0;
   const bow = { x: 0, y: 0 };
 
   let state = "intro"; // intro | play | finale | done | card
@@ -292,7 +294,8 @@
 
   // ---------- setup ----------
   function resize() {
-    DPR = Math.min(2, window.devicePixelRatio || 1);
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1) * perfScale);
+    spriteCache.clear();
     W = window.innerWidth; H = window.innerHeight;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     cv.style.width = W + "px"; cv.style.height = H + "px";
@@ -301,21 +304,39 @@
     bow.x = W / 2;
     bow.y = H - Math.max(84, H * .13);
 
-    sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, "#1d0c33");
-    sky.addColorStop(.45, "#4b1f63");
-    sky.addColorStop(.78, "#b2447a");
-    sky.addColorStop(1, "#ff9a8b");
-
-    stars = Array.from({ length: Math.round(W * H / 9000) }, () => ({
-      x: Math.random() * W, y: Math.random() * H * .6, r: rand(.5, 1.6), p: Math.random() * 6,
+    stars = Array.from({ length: Math.round(W * H / 9000) }, (_, i) => ({
+      x: Math.random() * W, y: Math.random() * H * .6, r: rand(.5, 1.6), g: i % 3,
     }));
     if (!clouds.length) clouds = Array.from({ length: 5 }, () => makeCloud(Math.random() * W));
-
-    hillBack = new Path2D(); hillFront = new Path2D();
-    buildHill(hillBack, H * .84, 26, .006, 1.3);
-    buildHill(hillFront, H * .92, 18, .009, 4.1);
+    paintBackground();
     if (big) big.ty = H * .34;
+  }
+  // sky, moon, hills and the bow's cloud never move, so draw them once per resize
+  function paintBackground() {
+    bgCv.width = cv.width; bgCv.height = cv.height;
+    const g = bgCv.getContext("2d", { alpha: false });
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const sky = g.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, "#1d0c33"); sky.addColorStop(.45, "#4b1f63");
+    sky.addColorStop(.78, "#b2447a"); sky.addColorStop(1, "#ff9a8b");
+    g.fillStyle = sky; g.fillRect(0, 0, W, H);
+    const mx = W * .82, my = H * .14, mr = 34 * scale;
+    const glow = g.createRadialGradient(mx, my, mr * .5, mx, my, mr * 4);
+    glow.addColorStop(0, "rgba(255,214,230,.35)"); glow.addColorStop(1, "rgba(255,214,230,0)");
+    g.fillStyle = glow; g.fillRect(mx - mr * 4, my - mr * 4, mr * 8, mr * 8);
+    g.fillStyle = "#ffe3ec"; g.beginPath(); g.arc(mx, my, mr, 0, Math.PI * 2); g.fill();
+    const back = new Path2D(), front = new Path2D();
+    buildHill(back, H * .84, 26, .006, 1.3);
+    buildHill(front, H * .92, 18, .009, 4.1);
+    g.fillStyle = "#7a2f6b"; g.fill(back);
+    g.fillStyle = "#4a1a50"; g.fill(front);
+    g.fillStyle = "rgba(255,244,240,.95)";
+    g.beginPath();
+    for (const [dx, dy, r] of [[-34, 44, 18], [-12, 38, 22], [14, 40, 21], [36, 46, 16], [0, 50, 20]]) {
+      g.moveTo(bow.x + dx * scale + r * scale, bow.y + dy * scale);
+      g.arc(bow.x + dx * scale, bow.y + dy * scale, r * scale, 0, Math.PI * 2);
+    }
+    g.fill();
   }
   function buildHill(p, base, amp, freq, phase) {
     p.moveTo(0, H);
@@ -334,10 +355,43 @@
     c.bezierCurveTo(x + s * .9, y - s * 1.15, x + s * 1.45, y + s * .05, x, y + s * .9);
     c.closePath();
   }
+  // ---------- sprites: shapes with glows are painted once, then stamped ----------
+  const spriteCache = new Map();
+  function sprite(key, box, paint) {
+    let c = spriteCache.get(key);
+    if (c) return c;
+    c = document.createElement("canvas");
+    const px = Math.max(1, Math.ceil(box * DPR));
+    c.width = c.height = px;
+    const g = c.getContext("2d");
+    g.scale(px / box, px / box);
+    paint(g, box, px / box);
+    spriteCache.set(key, c);
+    return c;
+  }
+  function heartSprite(color, glow, S) {
+    return sprite(`h|${color}|${glow || ""}|${S}`, S * 4.4, (g, box, r) => {
+      const cx = box / 2, cy = box / 2 + S * .1;
+      if (glow) { g.shadowColor = glow; g.shadowBlur = S * .6 * r; }
+      g.fillStyle = color; heartPath(g, cx, cy, S); g.fill();
+      g.shadowBlur = 0;
+      if (S > 8) {
+        g.fillStyle = "rgba(255,255,255,.65)";
+        g.beginPath(); g.ellipse(cx - S * .45, cy - S * .38, S * .2, S * .12, -.7, 0, Math.PI * 2); g.fill();
+      }
+    });
+  }
+  const bucket = s => s <= 14 ? 16 : s <= 42 ? 42 : 104;
+  function stampHeart(x, y, s, color, glow) {
+    const S = bucket(s), spr = heartSprite(color, glow, S), k = s / S, box = S * 4.4 * k;
+    ctx.drawImage(spr, x - box / 2, y - box / 2 - S * .1 * k, box, box);
+  }
   function drawHeart(x, y, s, color, opts = {}) {
+    const alpha = opts.alpha ?? 1;
+    if (alpha <= 0) return;
     const flap = Math.sin(t * (opts.flapSpeed || 11) + (opts.phase || 0));
     ctx.save();
-    ctx.globalAlpha = opts.alpha ?? 1;
+    ctx.globalAlpha = alpha;
     if (opts.wings) {
       ctx.fillStyle = "rgba(255,255,255,.88)";
       for (const side of [-1, 1]) {
@@ -350,17 +404,7 @@
         ctx.restore();
       }
     }
-    if (opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = opts.glowSize || 18; }
-    ctx.fillStyle = color;
-    heartPath(ctx, x, y, s);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    if (s > 8) {
-      ctx.fillStyle = "rgba(255,255,255,.65)";
-      ctx.beginPath();
-      ctx.ellipse(x - s * .45, y - s * .38, s * .2, s * .12, -.7, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    stampHeart(x, y, s, color, opts.glow);
     ctx.restore();
   }
   function drawArrow(x, y, ang, len = 54) {
@@ -385,11 +429,6 @@
     ctx.restore();
   }
   function drawBow() {
-    // little cloud the bow rests on
-    ctx.fillStyle = "rgba(255,244,240,.95)";
-    for (const [dx, dy, r] of [[-34, 44, 18], [-12, 38, 22], [14, 40, 21], [36, 46, 16], [0, 50, 20]]) {
-      ctx.beginPath(); ctx.arc(bow.x + dx * scale, bow.y + dy * scale, r * scale, 0, Math.PI * 2); ctx.fill();
-    }
     const pull = aim.on ? aim.power * 30 : 0;
     ctx.save();
     ctx.translate(bow.x, bow.y);
@@ -399,9 +438,11 @@
     ctx.strokeStyle = "rgba(255,244,240,.9)"; ctx.lineWidth = 1.6;
     ctx.beginPath(); ctx.moveTo(-6, -44); ctx.lineTo(-6 - pull, 0); ctx.lineTo(-6, 44); ctx.stroke();
     // limbs
-    const grad = ctx.createLinearGradient(0, -46, 0, 46);
-    grad.addColorStop(0, "#ffe08a"); grad.addColorStop(.5, COL.gold); grad.addColorStop(1, "#e9a93a");
-    ctx.strokeStyle = grad; ctx.lineWidth = 7; ctx.lineCap = "round";
+    if (!bowGrad) {
+      bowGrad = ctx.createLinearGradient(0, -46, 0, 46);
+      bowGrad.addColorStop(0, "#ffe08a"); bowGrad.addColorStop(.5, COL.gold); bowGrad.addColorStop(1, "#e9a93a");
+    }
+    ctx.strokeStyle = bowGrad; ctx.lineWidth = 7; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(-6, -44); ctx.quadraticCurveTo(30, 0, -6, 44); ctx.stroke();
     ctx.fillStyle = COL.rose;
     ctx.fillRect(9, -8, 7, 16);
@@ -410,12 +451,23 @@
     if (cooldown <= 0 && (state === "play" || state === "finale")) drawArrow(-6 - pull + 56, 0, 0, 56);
     ctx.restore();
   }
+  const PILL_S = 30;
   function drawPill(x, y, s, ang, alpha) {
-    const r = s * .42;
+    if (alpha <= 0) return;
+    const spr = pillSprite(), k = s / PILL_S, box = PILL_S * 2.8 * k;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.translate(x, y); ctx.rotate(ang);
-    ctx.shadowColor = "rgba(168,240,222,.7)"; ctx.shadowBlur = 14;
+    ctx.drawImage(spr, -box / 2, -box / 2, box, box);
+    ctx.restore();
+  }
+  function pillSprite() {
+    return sprite("pill", PILL_S * 2.8, (g, box, rr) => { g.translate(box / 2, box / 2); paintPill(g, PILL_S, rr); });
+  }
+  function paintPill(ctx, s, rr) {
+    const r = s * .42;
+    ctx.save();
+    ctx.shadowColor = "rgba(168,240,222,.7)"; ctx.shadowBlur = 14 * rr;
     ctx.fillStyle = COL.rose;
     ctx.beginPath(); ctx.arc(-s + r, 0, r, Math.PI / 2, Math.PI * 1.5); ctx.lineTo(0, -r); ctx.lineTo(0, r); ctx.closePath(); ctx.fill();
     ctx.fillStyle = COL.cream;
@@ -428,6 +480,17 @@
     // tiny heart printed on the white half
     ctx.fillStyle = COL.rose; heartPath(ctx, s * .45, 0, r * .45); ctx.fill();
     ctx.restore();
+  }
+  function dotSprite(color) {
+    return sprite(`d|${color}`, 12, g => { g.fillStyle = color; g.beginPath(); g.arc(6, 6, 4, 0, Math.PI * 2); g.fill(); });
+  }
+  function cloudSprite() {
+    return sprite("cloud", 220, g => {
+      g.fillStyle = "rgba(255,200,225,.13)";
+      for (const [dx, dy, r] of [[0, 0, 34], [36, -10, 28], [70, 2, 30], [34, 10, 30]]) {
+        g.beginPath(); g.arc(60 + dx * 1.3, 110 + dy * 1.3, r * 1.3, 0, Math.PI * 2); g.fill();
+      }
+    });
   }
   function drawHeartLocal() { ctx.fillStyle = COL.rose; heartPath(ctx, 0, 0, 5); ctx.fill(); }
 
@@ -511,8 +574,6 @@
     if (!ekg.w) return;
     ectx.clearRect(0, 0, ekg.w, ekg.h);
     ectx.lineWidth = 1.8; ectx.lineJoin = "round"; ectx.lineCap = "round";
-    ectx.strokeStyle = "#8ff7d0";
-    ectx.shadowColor = "rgba(143,247,208,.8)"; ectx.shadowBlur = 6;
     ectx.beginPath();
     let pen = false;
     for (let x = 0; x < ekg.w; x++) {
@@ -520,13 +581,13 @@
       if (y == null || x === ekg.head) { pen = false; continue; }
       if (!pen) { ectx.moveTo(x, y); pen = true; } else ectx.lineTo(x, y);
     }
-    ectx.stroke();
+    ectx.strokeStyle = "rgba(143,247,208,.22)"; ectx.lineWidth = 6; ectx.stroke();
+    ectx.strokeStyle = "#8ff7d0"; ectx.lineWidth = 1.8; ectx.stroke();
     const hx = (ekg.head - 1 + ekg.w) % ekg.w, hy = ekg.ys[hx];
     if (hy != null) {
-      ectx.fillStyle = "#e9fff7"; ectx.shadowBlur = 12;
-      ectx.beginPath(); ectx.arc(hx, hy, 2.6, 0, Math.PI * 2); ectx.fill();
+      ectx.fillStyle = "rgba(233,255,247,.3)"; ectx.beginPath(); ectx.arc(hx, hy, 6, 0, Math.PI * 2); ectx.fill();
+      ectx.fillStyle = "#e9fff7"; ectx.beginPath(); ectx.arc(hx, hy, 2.6, 0, Math.PI * 2); ectx.fill();
     }
-    ectx.shadowBlur = 0;
   }
 
   // ---------- meter ----------
@@ -650,17 +711,14 @@
 
     for (const a of arrows) {
       a.vy += G * dt; a.x += a.vx * dt; a.y += a.vy * dt;
-      const ang = Math.atan2(a.vy, a.vx);
-      const pts = [[a.x, a.y], [a.x - Math.cos(ang) * 18, a.y - Math.sin(ang) * 18]];
+      const sp = Math.hypot(a.vx, a.vy) || 1;
+      const bx = a.x - a.vx / sp * 18, by = a.y - a.vy / sp * 18;
+      const near = (cx, cy, r) => (a.x - cx) ** 2 + (a.y - cy) ** 2 < r * r || (bx - cx) ** 2 + (by - cy) ** 2 < r * r;
       for (const h of hearts) {
         if (h.dead || h.leaving) continue;
-        const r = h.s * 1.15;
-        if (pts.some(([x, y]) => (x - h.x) ** 2 + (y - h.y) ** 2 < r * r)) hit(h, a);
+        if (near(h.x, h.y, h.s * 1.15)) hit(h, a);
       }
-      if (big && state === "finale") {
-        const r = big.s * 1.1;
-        if (pts.some(([x, y]) => (x - big.x) ** 2 + (y - big.y) ** 2 < r * r)) { a.dead = true; hitBig(); }
-      }
+      if (big && state === "finale" && near(big.x, big.y, big.s * 1.1)) { a.dead = true; hitBig(); }
       if (a.y > H + 60 || a.x < -80 || a.x > W + 80 || a.y < -600) a.dead = true;
     }
     arrows = arrows.filter(a => !a.dead);
@@ -673,30 +731,25 @@
 
   // ---------- draw ----------
   function draw() {
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(bgCv, 0, 0);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-    // moon glow
-    const mx = W * .82, my = H * .14, mr = 34 * scale;
-    const glow = ctx.createRadialGradient(mx, my, mr * .5, mx, my, mr * 4);
-    glow.addColorStop(0, "rgba(255,214,230,.35)"); glow.addColorStop(1, "rgba(255,214,230,0)");
-    ctx.fillStyle = glow; ctx.fillRect(mx - mr * 4, my - mr * 4, mr * 8, mr * 8);
-    ctx.fillStyle = "#ffe3ec"; ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.fill();
-
-    for (const s of stars) {
-      ctx.globalAlpha = .25 + .55 * (.5 + .5 * Math.sin(t * 1.6 + s.p));
-      ctx.fillStyle = COL.cream; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+    // stars twinkle in three groups: three fills instead of one per star
+    ctx.fillStyle = COL.cream;
+    for (let grp = 0; grp < 3; grp++) {
+      ctx.globalAlpha = .25 + .55 * (.5 + .5 * Math.sin(t * 1.6 + grp * 2.1));
+      ctx.beginPath();
+      for (const st of stars) if (st.g === grp) ctx.rect(st.x - st.r, st.y - st.r, st.r * 2, st.r * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
 
-    ctx.fillStyle = "rgba(255,200,225,.13)";
+    const cs = cloudSprite();
     for (const c of clouds) {
-      for (const [dx, dy, r] of [[0, 0, 34], [36, -10, 28], [70, 2, 30], [34, 10, 30]]) {
-        ctx.beginPath(); ctx.arc(c.x + dx * c.s, c.y + dy * c.s, r * c.s, 0, Math.PI * 2); ctx.fill();
-      }
+      const k = c.s / 1.3;
+      ctx.drawImage(cs, c.x - 60 * k, c.y - 110 * k, 220 * k, 220 * k);
     }
-
-    ctx.fillStyle = "#7a2f6b"; ctx.fill(hillBack);
-    ctx.fillStyle = "#4a1a50"; ctx.fill(hillFront);
 
     for (const h of hearts) {
       if (h.pill) { drawPill(h.x, h.y, h.s, h.rot + t * h.spin, Math.max(0, h.alpha)); continue; }
@@ -706,9 +759,9 @@
 
     if (big) {
       const pulse = 1 + .05 * Math.sin(t * 4);
-      drawHeart(big.x, big.y, big.s * pulse, COL.rose, { wings: true, glow: "#ff9ec0", glowSize: 40, flapSpeed: 6 });
+      drawHeart(big.x, big.y, big.s * pulse, COL.rose, { wings: true, glow: "#ff9ec0", flapSpeed: 6 });
       ctx.fillStyle = COL.cream;
-      ctx.font = `${Math.round(big.s * .95)}px ${getComputedStyle(document.documentElement).getPropertyValue("--display")}`;
+      ctx.font = `${Math.round(big.s * .95)}px ${DISPLAY_FONT}`;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText("?", big.x, big.y + big.s * .05);
     }
@@ -737,12 +790,16 @@
     for (const p of parts) {
       ctx.globalAlpha = Math.min(1, p.life / Math.min(.5, p.max));
       if (p.kind === "heart") {
-        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.spin * p.life);
-        ctx.fillStyle = p.color; heartPath(ctx, 0, 0, p.size); ctx.fill(); ctx.restore();
+        const spr = heartSprite(p.color, null, 16), k = p.size / 16, box = 16 * 4.4 * k;
+        const a = p.spin * p.life, c = Math.cos(a) * DPR, sn = Math.sin(a) * DPR;
+        ctx.setTransform(c, sn, -sn, c, p.x * DPR, p.y * DPR);
+        ctx.drawImage(spr, -box / 2, -box / 2 - 1.6 * k, box, box);
       } else {
-        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size * .4, 0, Math.PI * 2); ctx.fill();
+        const spr = dotSprite(p.color), d = p.size * 1.2;
+        ctx.drawImage(spr, p.x - d / 2, p.y - d / 2, d, d);
       }
     }
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.globalAlpha = 1;
 
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -765,10 +822,14 @@
   }
 
   function frame(now) {
-    const dt = Math.min(.033, (now - last) / 1000);
+    const raw = (now - last) / 1000, dt = Math.min(.033, raw);
     last = now;
     update(dt); draw();
-    ekgUpdate(dt); ekgDraw();
+    ekgUpdate(dt);
+    if (!hud.classList.contains("off")) ekgDraw();
+    // if the phone keeps missing frames, render at a lower resolution
+    if (raw > .024 && raw < .25) slowTime += raw; else slowTime = Math.max(0, slowTime - raw * .5);
+    if (slowTime > 2 && perfScale > .5 && DPR > 1) { perfScale -= .25; slowTime = 0; resize(); ekgResize(); }
     requestAnimationFrame(frame);
   }
 
@@ -847,6 +908,10 @@
   }
   noBtn.addEventListener("pointerenter", e => { if (e.pointerType === "mouse") dodge(e); });
   noBtn.addEventListener("pointerdown", dodge);
+  // on phones, stop the tap from turning into a click on whatever slides under the finger
+  noBtn.addEventListener("touchstart", e => { if (noCount < NO_LINES.length - 1 || coding) e.preventDefault(); }, { passive: false });
+  let yesArmed = false;
+  yesBtn.addEventListener("pointerdown", () => { yesArmed = performance.now() - lastDodge > 600 && !coding; });
   noBtn.addEventListener("click", e => {
     if (coding || performance.now() - lastDodge < 450) return;
     if (noCount < NO_LINES.length - 1) { dodge(e); return; }
@@ -856,7 +921,10 @@
     $("endText").textContent = "Very common and fully curable. Treatment: show up Monday, let me hold your hand, repeat as needed. No refunds.";
     $("end").hidden = false;
   });
-  yesBtn.addEventListener("click", () => {
+  yesBtn.addEventListener("click", e => {
+    const keyboard = e.detail === 0;
+    if (!keyboard && (!yesArmed || performance.now() - lastDodge < 600 || coding)) { yesArmed = false; return; }
+    yesArmed = false;
     $("ask").hidden = true; resetNo();
     heartRain(160); sfx.yay();
     $("endEyebrow").textContent = "Discharge notes";
