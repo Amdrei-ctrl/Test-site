@@ -49,11 +49,23 @@
     color: var(--cream);
   }
   .meter-label span:last-child { font-variant-numeric: tabular-nums; color: var(--gold); }
-  .beat { display: inline-block; color: var(--rose); margin-right: 6px; animation: beat var(--beat, .83s) ease-in-out infinite; }
-  @keyframes beat { 0%, 40%, 100% { transform: scale(1); } 15% { transform: scale(1.35); } 28% { transform: scale(1.15); } }
+  .beat { display: inline-block; color: var(--rose); margin-right: 6px; }
+  .monitor {
+    position: relative; height: 46px; border-radius: 12px; overflow: hidden;
+    background:
+      linear-gradient(rgba(143, 247, 208, .07) 1px, transparent 1px) 0 0 / 100% 11.5px,
+      linear-gradient(90deg, rgba(143, 247, 208, .07) 1px, transparent 1px) 0 0 / 11.5px 100%,
+      rgba(16, 5, 28, .72);
+    box-shadow: inset 0 0 0 1.5px rgba(143, 247, 208, .22), 0 6px 18px rgba(10, 0, 20, .35);
+  }
+  .monitor canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: auto; }
+  .monitor .lead {
+    position: absolute; left: 8px; top: 5px; z-index: 1;
+    font: 800 9px var(--body); letter-spacing: .14em; color: rgba(143, 247, 208, .6);
+  }
   .rx { font-family: var(--display); color: var(--rose-deep); font-size: 1.2em; margin-right: 2px; }
   .track {
-    height: 14px; border-radius: 99px; overflow: hidden;
+    height: 8px; border-radius: 99px; overflow: hidden;
     background: rgba(255, 244, 240, .16);
     box-shadow: inset 0 0 0 2px rgba(255, 244, 240, .22);
   }
@@ -133,6 +145,7 @@
 <div class="hud off" id="hud">
   <div class="meter">
     <div class="meter-label"><span><span class="beat" aria-hidden="true">♥</span><span id="meterText">Heart rate</span></span><span id="meterCount">72 BPM</span></div>
+    <div class="monitor"><span class="lead">II</span><canvas id="ekg" aria-hidden="true"></canvas></div>
     <div class="track"><div class="fill" id="fill"></div></div>
   </div>
   <button class="mute" id="mute" type="button" aria-label="Mute sound">♪</button>
@@ -423,11 +436,73 @@
     texts.push({ x, y, text, color, size: size * scale, life: 1.1 });
   }
 
+  // ---------- EKG monitor ----------
+  const ekgCv = $("ekg"), ectx = ekgCv.getContext("2d"), beatEl = document.querySelector(".beat");
+  const ekg = { w: 0, h: 0, ys: [], head: 0, clock: 0, lastBeat: 0, bpm: 72, target: 72, speed: 95, peaked: false };
+  function ekgResize() {
+    const r = ekgCv.getBoundingClientRect();
+    ekg.w = Math.max(1, Math.round(r.width)); ekg.h = Math.max(1, Math.round(r.height));
+    ekgCv.width = ekg.w * DPR; ekgCv.height = ekg.h * DPR;
+    ectx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ekg.ys = new Array(ekg.w).fill(null);
+    ekg.head = 0;
+  }
+  // one heartbeat as a sum of bumps: P wave, QRS spike, T wave
+  function pqrst(tt, interval) {
+    const k = Math.min(1, interval / .62);
+    const g = (c, w, a) => a * Math.exp(-(((tt - c * k) / (w * k)) ** 2));
+    return g(.08, .028, .12) + g(.165, .009, -.14) + g(.185, .011, 1) + g(.205, .011, -.28) + g(.37, .045, .24);
+  }
+  function ekgUpdate(dt) {
+    if (!ekg.w) return;
+    ekg.bpm += (ekg.target - ekg.bpm) * Math.min(1, dt * 1.5);
+    const interval = 60 / ekg.bpm;
+    let cols = dt * ekg.speed;
+    ekg.carry = (ekg.carry || 0) + cols;
+    const step = 1 / ekg.speed;
+    while (ekg.carry >= 1) {
+      ekg.carry -= 1;
+      ekg.clock += step;
+      let ph = ekg.clock - ekg.lastBeat;
+      if (ph >= interval) { ekg.lastBeat += interval; ph = ekg.clock - ekg.lastBeat; ekg.peaked = false; }
+      if (!ekg.peaked && ph >= .185 * Math.min(1, interval / .62)) { ekg.peaked = true; onBeat(); }
+      const v = pqrst(ph, interval);
+      ekg.ys[ekg.head] = ekg.h * .62 - v * ekg.h * .48;
+      ekg.head = (ekg.head + 1) % ekg.w;
+      for (let i = 1; i <= 14; i++) ekg.ys[(ekg.head + i) % ekg.w] = null; // sweep gap
+    }
+  }
+  function onBeat() {
+    try { beatEl.animate([{ transform: "scale(1.45)" }, { transform: "scale(1)" }], { duration: 260, easing: "ease-out" }); } catch (e) {}
+    if (state === "play" || state === "finale") tone(1040, 1000, .05, "sine", .025);
+  }
+  function ekgDraw() {
+    if (!ekg.w) return;
+    ectx.clearRect(0, 0, ekg.w, ekg.h);
+    ectx.lineWidth = 1.8; ectx.lineJoin = "round"; ectx.lineCap = "round";
+    ectx.strokeStyle = "#8ff7d0";
+    ectx.shadowColor = "rgba(143,247,208,.8)"; ectx.shadowBlur = 6;
+    ectx.beginPath();
+    let pen = false;
+    for (let x = 0; x < ekg.w; x++) {
+      const y = ekg.ys[x];
+      if (y == null || x === ekg.head) { pen = false; continue; }
+      if (!pen) { ectx.moveTo(x, y); pen = true; } else ectx.lineTo(x, y);
+    }
+    ectx.stroke();
+    const hx = (ekg.head - 1 + ekg.w) % ekg.w, hy = ekg.ys[hx];
+    if (hy != null) {
+      ectx.fillStyle = "#e9fff7"; ectx.shadowBlur = 12;
+      ectx.beginPath(); ectx.arc(hx, hy, 2.6, 0, Math.PI * 2); ectx.fill();
+    }
+    ectx.shadowBlur = 0;
+  }
+
   // ---------- meter ----------
   function updateMeter() {
     fillEl.style.width = (love / GOAL * 100) + "%";
     const bpm = Math.round(72 + (love / GOAL) * 108);
-    document.documentElement.style.setProperty("--beat", (60 / bpm).toFixed(2) + "s");
+    ekg.target = bpm;
     meterCount.textContent = `${bpm} BPM`;
     meterText.textContent = state === "finale" ? "Tachycardia!" : "Heart rate";
   }
@@ -662,6 +737,7 @@
     const dt = Math.min(.033, (now - last) / 1000);
     last = now;
     update(dt); draw();
+    ekgUpdate(dt); ekgDraw();
     requestAnimationFrame(frame);
   }
 
@@ -708,9 +784,10 @@
 
   $("start").addEventListener("click", startGame);
   $("again").addEventListener("click", startGame);
-  window.addEventListener("resize", resize);
+  window.addEventListener("resize", () => { resize(); ekgResize(); });
 
   resize();
+  ekgResize();
   for (let i = 0; i < 4; i++) { spawnHeart(); hearts[i].x = rand(W * .1, W * .9); }
   requestAnimationFrame(frame);
 })();
