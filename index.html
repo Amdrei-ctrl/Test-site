@@ -129,11 +129,10 @@
   .btn-main:hover { transform: translateY(-2px); }
   .btn-main:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--rose-deep); }
   .btn-soft { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 2px rgba(125, 90, 134, .35); }
-  .answers { display: flex; justify-content: center; align-items: center; gap: 14px; flex-wrap: wrap; min-height: 64px; }
-  #yes { transform-origin: center; }
-  #no.loose { position: fixed; z-index: 6; transition: left .22s ease-out, top .22s ease-out; }
+  .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .answers .btn { padding-inline: 10px; white-space: nowrap; }
   .fine { font-size: 13px; color: var(--muted); }
-  .quip { min-height: 1.5em; font-weight: 800; color: var(--rose-deep); text-wrap: balance; }
+  .quip { min-height: 3em; display: grid; place-items: center; font-weight: 800; color: var(--rose-deep); text-wrap: balance; }
   .quip.show { animation: pop .4s cubic-bezier(.3, 1.5, .5, 1) both; }
 
   #code {
@@ -160,7 +159,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .card, .quip.show, .shake { animation: none; }
-    .fill, #no.loose { transition: none; }
+    .fill { transition: none; }
   }
 </style></head><body>
 
@@ -835,7 +834,7 @@
 
   // ---------- the question ----------
   const yesBtn = $("yes"), noBtn = $("no");
-  const NO_LINES = ["Not yet", "Not yet??", "Still no", "…not yet", "Hmm", "Okay, I'm nervous"];
+  const NO_LINES = ["Not yet", "Not yet??", "Still no", "…not yet", "Hmm", "I'm nervous"];
   const QUIPS = {
     1: "Really? The heart monitor says otherwise 📈",
     2: "Error 404: \u201Cnot ready\u201D not found",
@@ -887,8 +886,7 @@
   let noCount = 0;
   function resetNo() {
     noCount = 0; noBtn.textContent = NO_LINES[0]; quipEl.textContent = "";
-    noBtn.classList.remove("loose"); noBtn.style.left = noBtn.style.top = "";
-    yesBtn.style.transform = "";
+    yesBtn.style.fontSize = "";
   }
   function dodge(e) {
     if (coding || noCount >= NO_LINES.length - 1) return false;
@@ -898,15 +896,9 @@
     noCount++;
     if (QUIPS[noCount] === "code") flatline(); else if (QUIPS[noCount]) quip(QUIPS[noCount]);
     noBtn.textContent = NO_LINES[noCount];
-    yesBtn.style.transform = `scale(${1 + noCount * .14})`;
-    noBtn.classList.add("loose");
-    const r = noBtn.getBoundingClientRect(), pad = 20;
-    noBtn.style.left = (pad + Math.random() * Math.max(0, W - r.width - pad * 2)) + "px";
-    noBtn.style.top = (pad + Math.random() * Math.max(0, H - r.height - pad * 2)) + "px";
     tone(300, 220, .1, "triangle", .08);
     return true;
   }
-  noBtn.addEventListener("pointerenter", e => { if (e.pointerType === "mouse") dodge(e); });
   noBtn.addEventListener("pointerdown", dodge);
   // on phones, stop the tap from turning into a click on whatever slides under the finger
   noBtn.addEventListener("touchstart", e => { if (noCount < NO_LINES.length - 1 || coding) e.preventDefault(); }, { passive: false });
